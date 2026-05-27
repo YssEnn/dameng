@@ -24,7 +24,7 @@
 镜像已发布到 Docker Hub：
 
 ```bash
-docker pull yssenn/dameng-dm8:20260427_x86_CentOS7
+docker pull yssenn/dameng:dm8_20260427_x86_CentOS7
 ```
 
 启动容器：
@@ -38,7 +38,7 @@ docker run -d \
   -e DM_SYSDBA_PWD='DMdba_123' \
   -e DM_SYSAUDITOR_PWD='DMauditor_123' \
   -v dameng-data:/dmdata \
-  yssenn/dameng-dm8:20260427_x86_CentOS7
+  yssenn/dameng:dm8_20260427_x86_CentOS7
 ```
 
 更多配置和注意事项见 [docker_images/README.md](docker_images/README.md)。
