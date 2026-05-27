@@ -41,10 +41,10 @@ gpgcheck=0
 enabled=1
 EOF
 
-# 安装运行依赖、创建达梦运行用户和数据目录，并挂载 zip 内的 ISO 复制安装介质。
+# 安装运行依赖、创建达梦运行用户和数据目录，并从 zip 内的 ISO 提取安装介质。
 RUN set -eux && \
     yum clean all && \
-    yum install -y unzip glibc-common libaio net-tools util-linux && \
+    yum install -y unzip bsdtar glibc-common libaio net-tools util-linux && \
     localedef -c -f UTF-8 -i zh_CN zh_CN.UTF-8 && \
     groupadd -g 2001 dinstall && \
     useradd -g dinstall -m -d /home/dmdba -s /bin/bash -u 2001 dmdba && \
@@ -63,14 +63,11 @@ RUN set -eux && \
       'dmdba hard core unlimited' \
       'dmdba soft data unlimited' \
       'dmdba hard data unlimited' >> /etc/security/limits.conf && \
-    mkdir -p /dmiso /tmp/dm8_extract /mnt/dmiso "$DM_DATA_DIR" "$DM_ARCH_DIR" "$DM_BAK_DIR" && \
+    mkdir -p /dmiso /tmp/dm8_extract "$DM_DATA_DIR" "$DM_ARCH_DIR" "$DM_BAK_DIR" && \
     unzip /tmp/dm8.zip -d /tmp/dm8_extract && \
     iso_path="$(find /tmp/dm8_extract -maxdepth 3 -type f -name '*.iso' -print -quit)" && \
     if [ -z "$iso_path" ]; then echo "未在 dm8 zip 安装包中找到 ISO 文件"; exit 1; fi && \
-    mount -o loop "$iso_path" /mnt/dmiso && \
-    cp -a /mnt/dmiso/. /dmiso/ && \
-    umount /mnt/dmiso && \
-    rmdir /mnt/dmiso && \
+    bsdtar -C /dmiso -xf "$iso_path" && \
     chown -R dmdba:dinstall /home/dmdba /dmiso /dmdata && \
     chmod -R 755 "$DM_DATA_DIR" "$DM_ARCH_DIR" "$DM_BAK_DIR" && \
     chmod +x /entrypoint.sh && \
