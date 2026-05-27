@@ -19,24 +19,12 @@
 - `docker_images/entrypoint.sh`：容器入口脚本，负责首次启动时安装 DM8、初始化数据库实例、设置 PostgreSQL 兼容模式，并以前台 `dmserver` 启动数据库。
 - `docker_images/README.md`：Docker 镜像构建和容器运行说明。
 
-## 快速开始
+## Docker Hub
 
-进入镜像目录：
-
-```bash
-cd docker_images
-```
-
-将达梦安装包放到该目录，zip 内需要包含 `.iso` 安装介质，文件名需要与 `Dockerfile` 中的 `COPY` 指令保持一致：
-
-```text
-dm8_20260427_x86_CentOS7_64.zip
-```
-
-构建镜像：
+镜像已发布到 Docker Hub：
 
 ```bash
-docker build -t dameng:dm8_20260427_x86_CentOS7 .
+docker pull yssenn/dameng-dm8:20260427_x86_CentOS7
 ```
 
 启动容器：
@@ -50,7 +38,7 @@ docker run -d \
   -e DM_SYSDBA_PWD='DMdba_123' \
   -e DM_SYSAUDITOR_PWD='DMauditor_123' \
   -v dameng-data:/dmdata \
-  dameng:dm8_20260427_x86_CentOS7
+  yssenn/dameng-dm8:20260427_x86_CentOS7
 ```
 
 更多配置和注意事项见 [docker_images/README.md](docker_images/README.md)。
