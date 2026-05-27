@@ -33,9 +33,9 @@ docker build -t dameng-dm8:20260427_x86_CentOS7 .
 - 安装 `unzip`、`glibc-common`、`libaio`、`net-tools`、`util-linux` 等依赖。
 - 创建 `dmdba` 用户和 `dinstall` 用户组，并写入达梦运行所需 limits 配置。
 - 创建 `/dmdata/data`、`/dmdata/arch`、`/dmdata/dmbak` 等数据目录。
-- 解压 zip 到临时目录，loop 挂载其中的 ISO，并将 ISO 内的安装文件复制到 `/dmiso`。
+- 解压外层 zip 到临时目录，再解压其中的 ISO，并将 ISO 内的安装文件放到 `/dmiso`。
 
-构建阶段需要 Docker 环境允许 `mount -o loop`。如果构建报 `Operation not permitted`，需要在支持 loop mount 的构建环境中执行，或改为提前在宿主机解出 ISO 内容后再构建。
+构建阶段会校验 `/dmiso` 中是否存在 `DMInstall.bin`，避免容器启动时 `entrypoint.sh` 找不到安装程序。
 
 ## 启动容器
 
@@ -49,7 +49,7 @@ docker run -d \
   --ulimit nproc=65536:65536 \
   -e DM_SYSDBA_PWD='DMdba_123' \
   -e DM_SYSAUDITOR_PWD='DMauditor_123' \
-  -v dameng-data:/dmdata \
+  -v /Users/en/Documents/DockerData/dmdata:/dmdata \
   dameng-dm8:20260427_x86_CentOS7
 ```
 window
@@ -93,6 +93,7 @@ docker rm dameng-dm8
 | `DM_COMPATIBLE_MODE` | `7` | PostgreSQL 兼容模式；设为空可跳过写入 |
 | `DM_SYSDBA_PWD` | `DMdba_123` | `SYSDBA` 初始化密码 |
 | `DM_SYSAUDITOR_PWD` | `DMauditor_123` | `SYSAUDITOR` 初始化密码 |
+| `DM_RUN_ROOT_INSTALLER` | `0` | 是否执行官方 `root_installer.sh`；容器内默认跳过 systemd 服务配置 |
 | `DM_PAGE_SIZE` | 空 | 可选，传给 `dminit` |
 | `DM_EXTENT_SIZE` | 空 | 可选，传给 `dminit` |
 | `DM_LOG_SIZE` | 空 | 可选，传给 `dminit` |
@@ -119,7 +120,7 @@ $DM_HOME/script/root/dm_service_installer.sh -t dmserver -dm_ini "$DM_INI" -p "$
 
 1. 以 root 设置运行时 limits，创建并修复 `/dmdata` 目录权限。
 2. 如果 `/home/dmdba/dmdbms/bin/dmserver` 不存在，则切换到 `dmdba` 执行 DM8 安装。
-3. 安装完成后以 root 执行达梦 `root_installer.sh`。
+3. 默认跳过达梦 `root_installer.sh`，避免在无 systemd 的容器内启动系统服务；如确需执行，可设置 `DM_RUN_ROOT_INSTALLER=1`。
 4. 如果 `$DM_INI` 不存在，则切换到 `dmdba` 执行 `dminit` 初始化实例。
 5. 初始化完成后按 `DM_COMPATIBLE_MODE` 写入兼容模式。
 6. 如启用 `DM_REGISTER_SERVICE=1`，执行服务注册。
@@ -143,6 +144,7 @@ dameng-dm8:5236
 
 - 首次启动会执行安装和初始化，耗时会比普通启动更长。
 - `/dmdata` 建议始终挂载到 Docker volume 或宿主机目录，否则删除容器后数据库数据会丢失。
+- `DM_SYSDBA_PWD` 和 `DM_SYSAUDITOR_PWD` 会传给 `dminit`，长度必须在 8 到 48 位之间，并同时包含大写字母、小写字母和数字。
 - 当前脚本内置的默认管理员密码仅适合开发或测试环境；生产环境必须通过环境变量覆盖。
 - 重新使用已有 `/dmdata` 数据卷时，脚本会跳过实例初始化，直接按现有 `dm.ini` 启动数据库。
 - `DM_DB_NAME`、`DM_CASE_SENSITIVE`、`DM_CHARSET`、`DM_PAGE_SIZE` 等初始化参数创建实例后不能靠重启容器修改；需要修改时应重新初始化新的数据卷。

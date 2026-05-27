@@ -22,7 +22,7 @@ DM_SYSAUDITOR_PWD=${DM_SYSAUDITOR_PWD:-DMauditor_123}
 DM_NOFILE_LIMIT=${DM_NOFILE_LIMIT:-65536}
 DM_NPROC_LIMIT=${DM_NPROC_LIMIT:-65536}
 DM_FIX_OWNERSHIP=${DM_FIX_OWNERSHIP:-1}
-DM_RUN_ROOT_INSTALLER=${DM_RUN_ROOT_INSTALLER:-1}
+DM_RUN_ROOT_INSTALLER=${DM_RUN_ROOT_INSTALLER:-0}
 DM_REGISTER_SERVICE=${DM_REGISTER_SERVICE:-0}
 DM_SERVICE_SUFFIX=${DM_SERVICE_SUFFIX:-$DM_INSTANCE_NAME}
 DM_INI=${DM_INI:-$DM_DATA_DIR/$DM_DB_NAME/dm.ini}
@@ -31,11 +31,20 @@ export DM_HOME
 export PATH=$DM_HOME/bin:$PATH
 
 run_as_dmdba() {
-  if [ "$(id -u)" -eq 0 ]; then
-    runuser -u dmdba -- "$@"
-  else
+  if [ "$(id -u)" -ne 0 ]; then
     "$@"
+    return
   fi
+
+  if command -v setpriv >/dev/null 2>&1; then
+    local dmdba_uid dinstall_gid
+    dmdba_uid=$(id -u dmdba)
+    dinstall_gid=$(getent group dinstall | cut -d: -f3)
+    setpriv --reuid="$dmdba_uid" --regid="$dinstall_gid" --clear-groups "$@"
+    return
+  fi
+
+  runuser -u dmdba -- "$@"
 }
 
 exec_as_dmdba() {
@@ -47,7 +56,7 @@ exec_as_dmdba() {
     local dmdba_uid dinstall_gid
     dmdba_uid=$(id -u dmdba)
     dinstall_gid=$(getent group dinstall | cut -d: -f3)
-    exec setpriv --reuid="$dmdba_uid" --regid="$dinstall_gid" --init-groups "$@"
+    exec setpriv --reuid="$dmdba_uid" --regid="$dinstall_gid" --clear-groups "$@"
   fi
 
   exec runuser -u dmdba -- "$@"
@@ -61,6 +70,43 @@ set_runtime_limits() {
   if ! ulimit -u "$DM_NPROC_LIMIT" 2>/dev/null; then
     echo ">>> 警告：无法将 nproc 设置为 $DM_NPROC_LIMIT，请检查 Docker --ulimit 配置"
   fi
+}
+
+validate_init_password() {
+  local name value length
+  name=$1
+  value=$2
+  length=${#value}
+
+  if [ "$length" -lt 8 ] || [ "$length" -gt 48 ]; then
+    echo ">>> 错误：$name 长度必须在 8 到 48 位之间，当前长度为 $length"
+    return 1
+  fi
+
+  if [[ ! "$value" =~ [A-Z] ]] || [[ ! "$value" =~ [a-z] ]] || [[ ! "$value" =~ [0-9] ]]; then
+    echo ">>> 错误：$name 必须同时包含大写字母、小写字母和数字"
+    return 1
+  fi
+}
+
+validate_init_passwords() {
+  local failed=0
+
+  validate_init_password DM_SYSDBA_PWD "$DM_SYSDBA_PWD" || failed=1
+  validate_init_password DM_SYSAUDITOR_PWD "$DM_SYSAUDITOR_PWD" || failed=1
+
+  if [ "$failed" -ne 0 ]; then
+    echo ">>> 请使用符合长度要求的初始化密码重新创建容器"
+    exit 1
+  fi
+}
+
+validate_init_config_if_needed() {
+  if [ -f "$DM_INI" ]; then
+    return
+  fi
+
+  validate_init_passwords
 }
 
 prepare_directories() {
@@ -81,8 +127,13 @@ prepare_directories() {
     chmod 755 "$dir"
   done
 
-  [ -d /dmiso ] && chown -R dmdba:dinstall /dmiso
-  [ -d "$DM_HOME" ] && chown -R dmdba:dinstall "$DM_HOME"
+  if [ -d /dmiso ]; then
+    chown -R dmdba:dinstall /dmiso
+  fi
+
+  if [ -d "$DM_HOME" ]; then
+    chown -R dmdba:dinstall "$DM_HOME"
+  fi
 }
 
 find_dm_installer() {
@@ -119,8 +170,8 @@ install_dm() {
 
   (
     cd "$installer_dir"
-    # 官方交互安装顺序：中文、不输入 key、选择中国时区、典型安装、安装目录、确认。
-    printf '1\nn\n21\n1\n%s\ny\n' "$DM_HOME" | run_as_dmdba "./$installer_name" -i
+    # 官方交互安装顺序：中文、不输入 key、设置时区、选择中国时区、典型安装、安装目录、确认路径、确认安装。
+    printf '1\nn\ny\n21\n1\n%s\ny\ny\n' "$DM_HOME" | run_as_dmdba "./$installer_name" -i
   )
 }
 
@@ -164,6 +215,7 @@ init_dm_instance() {
   fi
 
   echo ">>> 初始化 DM8 实例"
+  validate_init_passwords
 
   if [ "$DM_SYSDBA_PWD" = "DMdba_123" ] || [ "$DM_SYSAUDITOR_PWD" = "DMauditor_123" ]; then
     echo ">>> 警告：正在使用默认初始化密码，生产环境请通过 DM_SYSDBA_PWD 和 DM_SYSAUDITOR_PWD 覆盖"
@@ -217,6 +269,7 @@ register_dm_service() {
 
 set_runtime_limits
 prepare_directories
+validate_init_config_if_needed
 install_dm
 run_root_installer
 init_dm_instance

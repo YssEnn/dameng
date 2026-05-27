@@ -12,9 +12,8 @@ ENV DM_ARCH_DIR=/dmdata/arch
 ENV DM_BAK_DIR=/dmdata/dmbak
 ENV PATH=$DM_HOME/bin:$PATH
 
-# 拷贝达梦外层 zip 安装包和容器入口脚本到镜像中。
+# 拷贝达梦外层 zip 安装包到镜像中。
 COPY dm8_20260427_x86_CentOS7_64.zip /tmp/dm8.zip
-COPY entrypoint.sh /entrypoint.sh
 
 # CentOS 7 已停止常规维护，这里切换到清华 CentOS Vault 镜像源。
 RUN rm -f /etc/yum.repos.d/*.repo && \
@@ -41,7 +40,7 @@ gpgcheck=0
 enabled=1
 EOF
 
-# 安装运行依赖、创建达梦运行用户和数据目录，并从 zip 内的 ISO 提取安装介质。
+# 安装运行依赖、创建达梦运行用户和数据目录，并先解压外层 zip，再解压 zip 内的 ISO 安装介质。
 RUN set -eux && \
     yum clean all && \
     yum install -y unzip bsdtar glibc-common libaio net-tools util-linux && \
@@ -64,14 +63,20 @@ RUN set -eux && \
       'dmdba soft data unlimited' \
       'dmdba hard data unlimited' >> /etc/security/limits.conf && \
     mkdir -p /dmiso /tmp/dm8_extract "$DM_DATA_DIR" "$DM_ARCH_DIR" "$DM_BAK_DIR" && \
-    unzip /tmp/dm8.zip -d /tmp/dm8_extract && \
-    iso_path="$(find /tmp/dm8_extract -maxdepth 3 -type f -name '*.iso' -print -quit)" && \
+    unzip -q /tmp/dm8.zip -d /tmp/dm8_extract && \
+    iso_path="$(find /tmp/dm8_extract -maxdepth 3 -type f -iname '*.iso' -print -quit)" && \
     if [ -z "$iso_path" ]; then echo "未在 dm8 zip 安装包中找到 ISO 文件"; exit 1; fi && \
     bsdtar -C /dmiso -xf "$iso_path" && \
+    installer_path="$(find /dmiso -maxdepth 5 -type f -name DMInstall.bin -print -quit)" && \
+    if [ -z "$installer_path" ]; then echo "未在 ISO 解压内容中找到 DMInstall.bin"; exit 1; fi && \
+    chmod +x "$installer_path" && \
     chown -R dmdba:dinstall /home/dmdba /dmiso /dmdata && \
     chmod -R 755 "$DM_DATA_DIR" "$DM_ARCH_DIR" "$DM_BAK_DIR" && \
-    chmod +x /entrypoint.sh && \
     rm -rf /tmp/dm8.zip /tmp/dm8_extract
+
+# 拷贝容器入口脚本。放在安装介质提取之后，便于修改脚本时复用前面的构建缓存。
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # 容器入口需要以 root 修复挂载卷权限和执行官方 root 配置脚本，
 # 实际安装、初始化和数据库进程会在 entrypoint 中切换到 dmdba。
