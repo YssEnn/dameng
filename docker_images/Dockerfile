@@ -7,9 +7,12 @@ ENV LC_ALL=zh_CN.UTF-8
 
 # 定义达梦数据库安装目录，并将数据库命令加入 PATH。
 ENV DM_HOME=/home/dmdba/dmdbms
+ENV DM_DATA_DIR=/dmdata/data
+ENV DM_ARCH_DIR=/dmdata/arch
+ENV DM_BAK_DIR=/dmdata/dmbak
 ENV PATH=$DM_HOME/bin:$PATH
 
-# 拷贝达梦安装包和容器入口脚本到镜像中。
+# 拷贝达梦外层 zip 安装包和容器入口脚本到镜像中。
 COPY dm8_20260427_x86_CentOS7_64.zip /tmp/dm8.zip
 COPY entrypoint.sh /entrypoint.sh
 
@@ -38,20 +41,44 @@ gpgcheck=0
 enabled=1
 EOF
 
-# 安装运行依赖、创建达梦运行用户和数据目录，并解压安装包。
-RUN yum clean all && \
-    yum install -y unzip glibc-common libaio net-tools && \
+# 安装运行依赖、创建达梦运行用户和数据目录，并挂载 zip 内的 ISO 复制安装介质。
+RUN set -eux && \
+    yum clean all && \
+    yum install -y unzip glibc-common libaio net-tools util-linux && \
     localedef -c -f UTF-8 -i zh_CN zh_CN.UTF-8 && \
-    groupadd dinstall && \
-    useradd -g dinstall -m -d /home/dmdba -s /bin/bash dmdba && \
-    mkdir -p /dmiso /dmdata/data /dmdata/arch /dmdata/dmbak && \
-    unzip /tmp/dm8.zip -d /dmiso && \
+    groupadd -g 2001 dinstall && \
+    useradd -g dinstall -m -d /home/dmdba -s /bin/bash -u 2001 dmdba && \
+    printf '%s\n' \
+      'dmdba soft nice 0' \
+      'dmdba hard nice 0' \
+      'dmdba soft as unlimited' \
+      'dmdba hard as unlimited' \
+      'dmdba soft fsize unlimited' \
+      'dmdba hard fsize unlimited' \
+      'dmdba soft nproc 65536' \
+      'dmdba hard nproc 65536' \
+      'dmdba soft nofile 65536' \
+      'dmdba hard nofile 65536' \
+      'dmdba soft core unlimited' \
+      'dmdba hard core unlimited' \
+      'dmdba soft data unlimited' \
+      'dmdba hard data unlimited' >> /etc/security/limits.conf && \
+    mkdir -p /dmiso /tmp/dm8_extract /mnt/dmiso "$DM_DATA_DIR" "$DM_ARCH_DIR" "$DM_BAK_DIR" && \
+    unzip /tmp/dm8.zip -d /tmp/dm8_extract && \
+    iso_path="$(find /tmp/dm8_extract -maxdepth 3 -type f -name '*.iso' -print -quit)" && \
+    if [ -z "$iso_path" ]; then echo "未在 dm8 zip 安装包中找到 ISO 文件"; exit 1; fi && \
+    mount -o loop "$iso_path" /mnt/dmiso && \
+    cp -a /mnt/dmiso/. /dmiso/ && \
+    umount /mnt/dmiso && \
+    rmdir /mnt/dmiso && \
     chown -R dmdba:dinstall /home/dmdba /dmiso /dmdata && \
+    chmod -R 755 "$DM_DATA_DIR" "$DM_ARCH_DIR" "$DM_BAK_DIR" && \
     chmod +x /entrypoint.sh && \
-    rm -f /tmp/dm8.zip
+    rm -rf /tmp/dm8.zip /tmp/dm8_extract
 
-# 后续命令以达梦专用用户身份执行，避免使用 root 运行数据库。
-USER dmdba
+# 容器入口需要以 root 修复挂载卷权限和执行官方 root 配置脚本，
+# 实际安装、初始化和数据库进程会在 entrypoint 中切换到 dmdba。
+USER root
 WORKDIR /home/dmdba
 
 # 暴露达梦数据库默认监听端口。
