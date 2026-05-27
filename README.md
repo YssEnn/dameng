@@ -36,7 +36,7 @@ dm8_20260427_x86_CentOS7_64.zip
 构建镜像：
 
 ```bash
-docker build -t dameng-dm8:20260427_x86_CentOS7 .
+docker build -t dameng:dm8_20260427_x86_CentOS7 .
 ```
 
 启动容器：
@@ -50,7 +50,7 @@ docker run -d \
   -e DM_SYSDBA_PWD='DMdba_123' \
   -e DM_SYSAUDITOR_PWD='DMauditor_123' \
   -v dameng-data:/dmdata \
-  dameng-dm8:20260427_x86_CentOS7
+  dameng:dm8_20260427_x86_CentOS7
 ```
 
 更多配置和注意事项见 [docker_images/README.md](docker_images/README.md)。

@@ -23,7 +23,7 @@ ls dm8_20260427_x86_CentOS7_64.zip
 在 `docker_images` 目录下执行：
 
 ```bash
-docker build -t dameng-dm8:20260427_x86_CentOS7 .
+docker build -t dameng:dm8_20260427_x86_CentOS7 .
 ```
 
 构建过程会完成以下操作：
@@ -50,11 +50,11 @@ docker run -d \
   -e DM_SYSDBA_PWD='DMdba_123' \
   -e DM_SYSAUDITOR_PWD='DMauditor_123' \
   -v /Users/en/Documents/DockerData/dmdata:/dmdata \
-  dameng-dm8:20260427_x86_CentOS7
+  dameng:dm8_20260427_x86_CentOS7
 ```
 window
 ```bash
-docker run -d --name dameng-dm8 -p 5236:5236 --ulimit nofile=65536:65536 --ulimit nproc=65536:65536 -e DM_SYSDBA_PWD='DMdba_123' -e DM_SYSAUDITOR_PWD='DMauditor_123' -v D:\DevFile\DockerData\dmdata:/dmdata dameng-dm8:20260427_x86_CentOS7
+docker run -d --name dameng-dm8 -p 5236:5236 --ulimit nofile=65536:65536 --ulimit nproc=65536:65536 -e DM_SYSDBA_PWD='DMdba_123' -e DM_SYSAUDITOR_PWD='DMauditor_123' -v D:\DevFile\DockerData\dmdata:/dmdata dameng:dm8_20260427_x86_CentOS7
 ```
 
 查看启动日志：
