@@ -5,7 +5,7 @@
 ## 文件说明
 
 - `Dockerfile`：定义镜像构建流程，包括基础镜像、语言环境、系统依赖、达梦用户、数据目录和入口脚本。
-- `entrypoint.sh`：容器启动入口，负责首次安装 DM8、初始化实例、设置兼容模式并启动 `dmserver`。
+- `entrypoint.sh`：容器启动入口，负责首次安装 DM8、初始化实例并启动 `dmserver`。
 - `dm8_20260427_x86_CentOS7_64.zip`：达梦 DM8 安装包，zip 内需要包含 `.iso` 安装介质，构建镜像前手动放入当前目录。
 
 ## 构建前准备
@@ -90,7 +90,6 @@ docker rm dameng-dm8
 | `DM_PORT_NUM` | `5236` | 数据库监听端口 |
 | `DM_CASE_SENSITIVE` | `0` | 是否大小写敏感 |
 | `DM_CHARSET` | `1` | 字符集，默认 UTF-8 |
-| `DM_COMPATIBLE_MODE` | `7` | PostgreSQL 兼容模式；设为空可跳过写入 |
 | `DM_SYSDBA_PWD` | `DMdba_123` | `SYSDBA` 初始化密码 |
 | `DM_SYSAUDITOR_PWD` | `DMauditor_123` | `SYSAUDITOR` 初始化密码 |
 | `DM_RUN_ROOT_INSTALLER` | `0` | 是否执行官方 `root_installer.sh`；容器内默认跳过 systemd 服务配置 |
@@ -114,6 +113,37 @@ $DM_HOME/script/root/dm_service_installer.sh -t dmserver -dm_ini "$DM_INI" -p "$
 
 容器内不使用该服务脚本启动数据库；服务脚本主要用于需要进入容器内按官方命令手工管理服务的场景。
 
+## PostgreSQL 兼容模式
+
+需要兼容 PostgreSQL 时，首次初始化完成后手动修改实例数据目录下的 `dm.ini`。
+
+使用上面的 macOS 挂载路径时，宿主机文件为：
+
+```text
+/Users/en/Documents/DockerData/dmdata/data/DAMENG/dm.ini
+```
+
+容器内对应路径为：
+
+```text
+/dmdata/data/DAMENG/dm.ini
+```
+
+建议按实际需求修改这些参数：
+
+```ini
+COMPATIBLE_MODE                 = 7
+JSON_MODE                       = 1
+INSERT_COLUMN_MATCH             = 2
+```
+
+- `COMPATIBLE_MODE = 7`：部分兼容 PostgreSQL，是 PostgreSQL 兼容模式的核心参数。
+- `JSON_MODE = 1`：JSON 语法解析兼容 PostgreSQL；如果业务不使用 PostgreSQL 风格 JSON 语法，可以不改。
+- `INSERT_COLUMN_MATCH = 2`：插入操作按 PostgreSQL 规则匹配列；如果业务 SQL 不依赖该行为，可以不改。
+
+修改后需要重启数据库容器生效：
+
+
 ## 启动逻辑
 
 容器启动时会执行 `entrypoint.sh`：
@@ -122,23 +152,9 @@ $DM_HOME/script/root/dm_service_installer.sh -t dmserver -dm_ini "$DM_INI" -p "$
 2. 如果 `/home/dmdba/dmdbms/bin/dmserver` 不存在，则切换到 `dmdba` 执行 DM8 安装。
 3. 默认跳过达梦 `root_installer.sh`，避免在无 systemd 的容器内启动系统服务；如确需执行，可设置 `DM_RUN_ROOT_INSTALLER=1`。
 4. 如果 `$DM_INI` 不存在，则切换到 `dmdba` 执行 `dminit` 初始化实例。
-5. 初始化完成后按 `DM_COMPATIBLE_MODE` 写入兼容模式。
-6. 如启用 `DM_REGISTER_SERVICE=1`，执行服务注册。
-7. 使用 `dmdba` 前台启动 `dmserver`。
+5. 如启用 `DM_REGISTER_SERVICE=1`，执行服务注册。
+6. 使用 `dmdba` 前台启动 `dmserver`。
 
-## 连接信息
-
-宿主机连接地址：
-
-```text
-127.0.0.1:5236
-```
-
-容器网络内连接地址：
-
-```text
-dameng-dm8:5236
-```
 
 ## 注意事项
 

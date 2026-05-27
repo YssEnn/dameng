@@ -16,7 +16,6 @@ DM_INSTANCE_NAME=${DM_INSTANCE_NAME:-DMSERVER}
 DM_PORT_NUM=${DM_PORT_NUM:-5236}
 DM_CASE_SENSITIVE=${DM_CASE_SENSITIVE:-0}
 DM_CHARSET=${DM_CHARSET:-1}
-DM_COMPATIBLE_MODE=${DM_COMPATIBLE_MODE:-7}
 DM_SYSDBA_PWD=${DM_SYSDBA_PWD:-DMdba_123}
 DM_SYSAUDITOR_PWD=${DM_SYSAUDITOR_PWD:-DMauditor_123}
 DM_NOFILE_LIMIT=${DM_NOFILE_LIMIT:-65536}
@@ -197,18 +196,6 @@ run_root_installer() {
   fi
 }
 
-set_compatible_mode() {
-  if [ -z "$DM_COMPATIBLE_MODE" ]; then
-    return
-  fi
-
-  if grep -qi '^[[:space:]]*COMPATIBLE_MODE[[:space:]]*=' "$DM_INI"; then
-    sed -i -E "s/^[[:space:]]*COMPATIBLE_MODE[[:space:]]*=.*/COMPATIBLE_MODE                 = $DM_COMPATIBLE_MODE/" "$DM_INI"
-  else
-    printf '\nCOMPATIBLE_MODE                 = %s\n' "$DM_COMPATIBLE_MODE" >> "$DM_INI"
-  fi
-}
-
 init_dm_instance() {
   if [ -f "$DM_INI" ]; then
     return
@@ -237,7 +224,6 @@ init_dm_instance() {
   [ -n "${DM_LOG_SIZE:-}" ] && init_args+=("LOG_SIZE=$DM_LOG_SIZE")
 
   run_as_dmdba "$DM_HOME/bin/dminit" "${init_args[@]}"
-  set_compatible_mode
 }
 
 register_dm_service() {
@@ -274,9 +260,6 @@ install_dm
 run_root_installer
 init_dm_instance
 register_dm_service
-
-echo ">>> 当前兼容模式："
-grep -i 'COMPATIBLE_MODE' "$DM_INI" || true
 
 # Docker 容器中使用前台 dmserver，便于 Docker 正确转发停止信号。
 echo ">>> 启动 DM8 数据库"
